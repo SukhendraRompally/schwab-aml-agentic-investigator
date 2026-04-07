@@ -1,22 +1,94 @@
-import { Database, Activity } from "lucide-react";
-import { usePipeline } from "@/hooks/usePipeline";
+import { useState } from "react";
+import { useGetAlert, getGetAlertQueryKey } from "@workspace/api-client-react";
 import { DEMO_MODE, PIPELINE_BASE_URL } from "@/config";
+import { mockAlertDetails } from "@/mockData";
+import { usePipeline } from "@/hooks/usePipeline";
+import { MetricCards } from "@/components/MetricCards";
+import { Sidebar } from "@/components/Sidebar";
+import { TriageStep } from "@/components/TriageStep";
+import { LLMReasoningStep } from "@/components/LLMReasoningStep";
+import { SARDraftStep } from "@/components/SARDraftStep";
+import { ValidationStep } from "@/components/ValidationStep";
 import { PipelineControl } from "@/components/PipelineControl";
 import { LiveScoreboard } from "@/components/LiveScoreboard";
 import { TransactionFeed } from "@/components/TransactionFeed";
 import { FullResults } from "@/components/FullResults";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  AlertTriangle,
+  Brain,
+  FileText,
+  ShieldCheck,
+  Activity,
+  Database,
+  Zap,
+  ChevronDown,
+  ChevronUp,
+} from "lucide-react";
 
 export function Dashboard() {
-  const { state, runPipeline, reset } = usePipeline();
-  const { status, cumulative, results } = state;
-  const isRunning = status === "running";
-  const isDone = status === "done";
-  const hasActivity = isRunning || isDone || status === "error";
+  const [selectedAlertId, setSelectedAlertId] = useState<string | null>(null);
+  const [pipelineOpen, setPipelineOpen] = useState(false);
+  const { state: pipelineState, runPipeline, reset: resetPipeline } = usePipeline();
+
+  const { data: alertDetail, isLoading } = useGetAlert(
+    selectedAlertId ?? "",
+    {
+      query: {
+        enabled: !DEMO_MODE && !!selectedAlertId,
+        queryKey: getGetAlertQueryKey(selectedAlertId ?? ""),
+      },
+    }
+  );
+
+  const detail =
+    DEMO_MODE && selectedAlertId
+      ? mockAlertDetails[selectedAlertId] ?? null
+      : alertDetail ?? null;
+
+  const pipelineIsActive =
+    pipelineState.status === "running" ||
+    pipelineState.status === "done" ||
+    pipelineState.status === "error";
+
+  const steps = [
+    {
+      id: "triage",
+      label: "Behavioral Triage",
+      shortLabel: "Triage",
+      icon: AlertTriangle,
+      badge: detail ? String(detail.triageFlags?.length ?? 0) : undefined,
+    },
+    {
+      id: "reasoning",
+      label: "LLM Investigator",
+      shortLabel: "Reasoning",
+      icon: Brain,
+      badge: detail?.llmReasoning
+        ? String(Math.round((detail.llmReasoning.confidenceScore ?? 0) * 100)) + "%"
+        : undefined,
+    },
+    {
+      id: "sar",
+      label: "SAR Drafter",
+      shortLabel: "SAR",
+      icon: FileText,
+      badge: detail?.sarDraft ? "Draft Ready" : undefined,
+    },
+    {
+      id: "validation",
+      label: "Reveal Ground Truth",
+      shortLabel: "Validation",
+      icon: ShieldCheck,
+    },
+  ];
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
+      {/* ── Header ── */}
       <header
         className="flex-shrink-0 border-b border-border/50 px-6 py-3"
         style={{ backgroundColor: "hsl(var(--secondary))" }}
@@ -37,10 +109,21 @@ export function Dashboard() {
                 Demo Mode
               </Badge>
             )}
-            <div className="flex items-center gap-2 text-xs text-muted-foreground font-mono">
-              <span className="text-white/40">Backend:</span>
-              <span className="text-white/60">{PIPELINE_BASE_URL}</span>
-            </div>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => setPipelineOpen((o) => !o)}
+              className={`text-white/70 hover:text-white hover:bg-white/10 text-xs ${pipelineIsActive ? "text-primary" : ""}`}
+              data-testid="pipeline-toggle-btn"
+            >
+              <Zap className={`h-3.5 w-3.5 mr-1.5 ${pipelineState.status === "running" ? "animate-pulse text-primary" : ""}`} />
+              Batch Pipeline
+              {pipelineOpen ? (
+                <ChevronUp className="h-3 w-3 ml-1" />
+              ) : (
+                <ChevronDown className="h-3 w-3 ml-1" />
+              )}
+            </Button>
             <div className="flex items-center gap-2" data-testid="system-status">
               <Activity className="h-4 w-4 text-green-400" />
               <span className="relative flex h-2 w-2">
@@ -53,79 +136,148 @@ export function Dashboard() {
         </div>
       </header>
 
-      <PipelineControl state={state} onRun={runPipeline} onReset={reset} />
-
-      <ScrollArea className="flex-1">
-        <div className="px-6 py-5 space-y-6 max-w-7xl mx-auto">
-          {!hasActivity && (
-            <div
-              className="flex flex-col items-center justify-center py-24 text-center"
-              data-testid="idle-state"
-            >
-              <div className="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center mb-5">
-                <Database className="h-10 w-10 text-primary" />
-              </div>
-              <h2 className="text-xl font-semibold text-foreground mb-2">
-                Ready to Investigate
-              </h2>
-              <p className="text-sm text-muted-foreground max-w-md mb-6">
-                Click <strong>Run Pipeline</strong> above to launch the 3-step AI pipeline on
-                a 100-transaction PaySim sample. The system will triage transactions,
-                apply LLM investigation, generate SAR reports, and validate against ground truth.
-              </p>
-              <div className="grid grid-cols-3 gap-4 text-xs text-center w-full max-w-sm">
-                {[
-                  { n: "1", label: "Behavioral Triage", desc: "Rule-based flagging" },
-                  { n: "2", label: "LLM Investigation", desc: "AI forensic analysis + SAR drafting" },
-                  { n: "3", label: "Ground Truth", desc: "Precision / Recall validation" },
-                ].map((s) => (
-                  <div
-                    key={s.n}
-                    className="rounded-lg border border-border bg-card p-3"
-                  >
-                    <div className="w-6 h-6 rounded-full bg-primary/15 text-primary font-bold text-xs flex items-center justify-center mx-auto mb-2">
-                      {s.n}
-                    </div>
-                    <p className="font-semibold text-foreground text-[11px]">{s.label}</p>
-                    <p className="text-muted-foreground text-[10px] mt-0.5">{s.desc}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {isRunning && (
-            <>
-              <LiveScoreboard cumulative={cumulative} isLive />
-              <div>
-                <h3 className="text-sm font-semibold text-foreground mb-3">
-                  Live Transaction Feed
-                </h3>
-                <TransactionFeed
-                  transactions={cumulative.completed_transactions}
-                  isLive
-                />
-              </div>
-            </>
-          )}
-
-          {isDone && results && <FullResults results={results} />}
-
-          {status === "error" && (
-            <div
-              className="rounded-lg border border-destructive/30 bg-destructive/5 px-5 py-6 text-center"
-              data-testid="error-state"
-            >
-              <p className="text-sm font-semibold text-destructive mb-1">Pipeline Error</p>
-              <p className="text-xs text-muted-foreground">{state.error}</p>
-              <p className="text-[11px] text-muted-foreground mt-2">
-                Make sure the backend is reachable at{" "}
-                <code className="font-mono bg-muted px-1 rounded">{PIPELINE_BASE_URL}</code>
-              </p>
+      {/* ── Batch Pipeline Panel (collapsible) ── */}
+      {pipelineOpen && (
+        <div className="flex-shrink-0 border-b border-border bg-muted/30">
+          <PipelineControl
+            state={pipelineState}
+            onRun={runPipeline}
+            onReset={resetPipeline}
+          />
+          {pipelineIsActive && (
+            <div className="px-6 pb-4 space-y-4">
+              {pipelineState.status === "running" && (
+                <>
+                  <LiveScoreboard cumulative={pipelineState.cumulative} isLive />
+                  <TransactionFeed
+                    transactions={pipelineState.cumulative.completed_transactions}
+                    isLive
+                    maxHeight="220px"
+                  />
+                </>
+              )}
+              {pipelineState.status === "done" && pipelineState.results && (
+                <FullResults results={pipelineState.results} />
+              )}
+              {pipelineState.status === "error" && (
+                <p className="text-xs text-destructive py-2">
+                  {pipelineState.error} — backend: {PIPELINE_BASE_URL}
+                </p>
+              )}
             </div>
           )}
         </div>
-      </ScrollArea>
+      )}
+
+      {/* ── Metrics Row ── */}
+      <div className="flex-shrink-0 px-6 py-4 border-b border-border bg-background">
+        <MetricCards />
+      </div>
+
+      {/* ── Main: Sidebar + Detail Panel ── */}
+      <div className="flex flex-1 overflow-hidden">
+        <aside className="flex-shrink-0 overflow-hidden border-r border-border">
+          <Sidebar
+            selectedAlertId={selectedAlertId}
+            onSelectAlert={setSelectedAlertId}
+          />
+        </aside>
+
+        <main className="flex-1 overflow-hidden flex flex-col">
+          {!selectedAlertId ? (
+            <div className="flex flex-1 items-center justify-center">
+              <div className="text-center max-w-sm">
+                <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
+                  <AlertTriangle className="h-8 w-8 text-primary" />
+                </div>
+                <h3 className="text-lg font-semibold text-foreground mb-2">
+                  No Alert Selected
+                </h3>
+                <p className="text-sm text-muted-foreground">
+                  Select an alert from the work queue to begin forensic analysis
+                  through the 4-step pipeline.
+                </p>
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-col flex-1 overflow-hidden">
+              <div className="flex-shrink-0 px-6 pt-4 pb-0">
+                <div className="mb-3">
+                  <h2 className="text-base font-semibold text-foreground font-mono">
+                    {selectedAlertId}
+                  </h2>
+                  <p className="text-xs text-muted-foreground">
+                    {isLoading
+                      ? "Loading analysis…"
+                      : detail
+                        ? `${detail.accountName} — $${(detail.totalAmount ?? 0).toLocaleString()}`
+                        : "Alert not found"}
+                  </p>
+                </div>
+              </div>
+
+              <Tabs defaultValue="triage" className="flex-1 flex flex-col overflow-hidden px-6 pb-4">
+                <TabsList className="grid grid-cols-4 flex-shrink-0 mb-4 h-auto">
+                  {steps.map((step, i) => {
+                    const Icon = step.icon;
+                    return (
+                      <TabsTrigger
+                        key={step.id}
+                        value={step.id}
+                        className="flex items-center gap-1.5 py-2.5"
+                        data-testid={`tab-${step.id}`}
+                      >
+                        <span className="flex items-center justify-center w-5 h-5 rounded-full bg-muted text-muted-foreground text-[10px] font-bold flex-shrink-0">
+                          {i + 1}
+                        </span>
+                        <Icon className="h-3.5 w-3.5 hidden sm:block flex-shrink-0" />
+                        <span className="text-xs font-medium truncate">
+                          {step.shortLabel}
+                        </span>
+                        {step.badge && (
+                          <Badge
+                            className="text-[9px] px-1.5 h-4 ml-0.5 hidden md:inline-flex flex-shrink-0"
+                            variant="secondary"
+                          >
+                            {step.badge}
+                          </Badge>
+                        )}
+                      </TabsTrigger>
+                    );
+                  })}
+                </TabsList>
+
+                <ScrollArea className="flex-1">
+                  <div className="pr-2 pb-4">
+                    <TabsContent value="triage" className="mt-0">
+                      <TriageStep detail={detail} isLoading={!DEMO_MODE && isLoading} />
+                    </TabsContent>
+
+                    <TabsContent value="reasoning" className="mt-0">
+                      <LLMReasoningStep
+                        detail={detail}
+                        isLoading={!DEMO_MODE && isLoading}
+                      />
+                    </TabsContent>
+
+                    <TabsContent value="sar" className="mt-0">
+                      <SARDraftStep detail={detail} isLoading={!DEMO_MODE && isLoading} />
+                    </TabsContent>
+
+                    <TabsContent value="validation" className="mt-0">
+                      <ValidationStep
+                        alertId={selectedAlertId}
+                        detail={detail}
+                        isLoading={!DEMO_MODE && isLoading}
+                      />
+                    </TabsContent>
+                  </div>
+                </ScrollArea>
+              </Tabs>
+            </div>
+          )}
+        </main>
+      </div>
     </div>
   );
 }
