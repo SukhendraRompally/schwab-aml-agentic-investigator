@@ -34,7 +34,7 @@ export function Dashboard() {
   const [pipelineOpen, setPipelineOpen] = useState(false);
   const { state: pipelineState, runPipeline, reset: resetPipeline } = usePipeline();
 
-  const { data: alertDetail, isLoading } = useGetAlert(
+  const { data: alertDetail, isLoading, isError: alertDetailError } = useGetAlert(
     selectedAlertId ?? "",
     {
       query: {
@@ -47,7 +47,8 @@ export function Dashboard() {
   const detail =
     DEMO_MODE && selectedAlertId
       ? mockAlertDetails[selectedAlertId] ?? null
-      : alertDetail ?? null;
+      : alertDetail ??
+        (alertDetailError && selectedAlertId ? mockAlertDetails[selectedAlertId] ?? null : null);
 
   const pipelineIsActive =
     pipelineState.status === "running" ||
