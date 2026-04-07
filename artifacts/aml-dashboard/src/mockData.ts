@@ -178,6 +178,13 @@ export const mockAlertDetails: Record<string, AlertDetail> = {
 
 mockAlerts.forEach((alert) => {
   if (!mockAlertDetails[alert.alertId]) {
+    const aiDecision: "SUSPICIOUS" | "REVIEW_NEEDED" | "BENIGN" =
+      alert.riskScore > 80
+        ? "SUSPICIOUS"
+        : alert.riskScore > 60
+          ? "REVIEW_NEEDED"
+          : "BENIGN";
+
     mockAlertDetails[alert.alertId] = {
       ...alert,
       triageFlags: [
@@ -200,13 +207,21 @@ mockAlerts.forEach((alert) => {
           "Transaction volume deviates from 6-month baseline",
           `${alert.flagCount} distinct behavioral flags triggered`,
         ],
-        aiDecision:
-          alert.riskScore > 80
-            ? "SUSPICIOUS"
-            : alert.riskScore > 60
-              ? "REVIEW_NEEDED"
-              : "BENIGN",
+        aiDecision,
         modelUsed: "claude-3-5-sonnet-20241022",
+      },
+      sarDraft: {
+        reportNumber: `SAR-2024-SW-${alert.alertId}`,
+        filingDate: new Date().toISOString(),
+        subjectName: alert.accountName,
+        subjectAccountNumber: alert.accountId,
+        suspiciousActivityType: alert.primaryFlag.replace(/_/g, " / "),
+        narrative: `Charles Schwab & Co., Inc. is filing this Suspicious Activity Report regarding account holder ${alert.accountName} (Account No. ${alert.accountId}). During the reporting period, the subject conducted transactions totaling $${alert.totalAmount.toLocaleString()} that exhibit characteristics consistent with ${alert.primaryFlag.replace(/_/g, " ").toLowerCase()} typology.\n\nBased on AI-assisted forensic analysis (Confidence: ${alert.riskScore}%), this activity is assessed as ${aiDecision.replace(/_/g, " ")}. ${alert.flagCount} behavioral flag${alert.flagCount !== 1 ? "s" : ""} were triggered during automated screening. Manual review and, if warranted, escalation to FinCEN is recommended.`,
+        totalAmount: alert.totalAmount,
+        dateRangeStart: iso(1000 * 60 * 60 * 48),
+        dateRangeEnd: new Date().toISOString(),
+        filingInstitution: "Charles Schwab & Co., Inc.",
+        filingOfficer: "AML Compliance Team — AI.x Division",
       },
     };
   }
