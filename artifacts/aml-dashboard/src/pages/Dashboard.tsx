@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useGetAlert, getGetAlertQueryKey } from "@workspace/api-client-react";
 import { DEMO_MODE, PIPELINE_BASE_URL } from "@/config";
 import { mockAlertDetails } from "@/mockData";
 import { usePipeline } from "@/hooks/usePipeline";
+import { buildPipelineWorkQueue } from "@/lib/transactionToAlert";
 import { MetricCards } from "@/components/MetricCards";
 import { Sidebar } from "@/components/Sidebar";
 import { TriageStep } from "@/components/TriageStep";
@@ -34,21 +35,35 @@ export function Dashboard() {
   const [pipelineOpen, setPipelineOpen] = useState(false);
   const { state: pipelineState, runPipeline, reset: resetPipeline } = usePipeline();
 
+  const pipelineWorkQueue = useMemo(() => {
+    if (pipelineState.status !== "done" || !pipelineState.results) return null;
+    return buildPipelineWorkQueue(
+      pipelineState.results.flagged_transactions,
+      pipelineState.results.sars
+    );
+  }, [pipelineState.status, pipelineState.results]);
+
   const { data: alertDetail, isLoading, isError: alertDetailError } = useGetAlert(
     selectedAlertId ?? "",
     {
       query: {
-        enabled: !DEMO_MODE && !!selectedAlertId,
+        enabled: !DEMO_MODE && !pipelineWorkQueue && !!selectedAlertId,
         queryKey: getGetAlertQueryKey(selectedAlertId ?? ""),
       },
     }
   );
 
-  const detail =
-    DEMO_MODE && selectedAlertId
-      ? mockAlertDetails[selectedAlertId] ?? null
-      : alertDetail ??
-        (alertDetailError && selectedAlertId ? mockAlertDetails[selectedAlertId] ?? null : null);
+  const detail = useMemo(() => {
+    if (!selectedAlertId) return null;
+    if (pipelineWorkQueue) return pipelineWorkQueue.details[selectedAlertId] ?? null;
+    if (DEMO_MODE) return mockAlertDetails[selectedAlertId] ?? null;
+    return alertDetail ?? (alertDetailError ? mockAlertDetails[selectedAlertId] ?? null : null);
+  }, [selectedAlertId, pipelineWorkQueue, alertDetail, alertDetailError]);
+
+  const pipelineVerdict = useMemo(() => {
+    if (!selectedAlertId || !pipelineWorkQueue) return null;
+    return pipelineWorkQueue.verdicts[selectedAlertId] ?? null;
+  }, [selectedAlertId, pipelineWorkQueue]);
 
   const pipelineIsActive =
     pipelineState.status === "running" ||
@@ -58,14 +73,12 @@ export function Dashboard() {
   const steps = [
     {
       id: "triage",
-      label: "Behavioral Triage",
       shortLabel: "Triage",
       icon: AlertTriangle,
       badge: detail ? String(detail.triageFlags?.length ?? 0) : undefined,
     },
     {
       id: "reasoning",
-      label: "LLM Investigator",
       shortLabel: "Reasoning",
       icon: Brain,
       badge: detail?.llmReasoning
@@ -74,14 +87,12 @@ export function Dashboard() {
     },
     {
       id: "sar",
-      label: "SAR Drafter",
       shortLabel: "SAR",
       icon: FileText,
-      badge: detail?.sarDraft ? "Draft Ready" : undefined,
+      badge: detail?.sarDraft ? "Ready" : undefined,
     },
     {
       id: "validation",
-      label: "Reveal Ground Truth",
       shortLabel: "Validation",
       icon: ShieldCheck,
     },
@@ -110,14 +121,22 @@ export function Dashboard() {
                 Demo Mode
               </Badge>
             )}
+            {pipelineWorkQueue && (
+              <Badge className="text-[10px] px-2 py-0.5 bg-primary/20 text-primary border border-primary/30">
+                <Zap className="h-2.5 w-2.5 mr-1" />
+                {pipelineWorkQueue.alerts.length} Flagged for Review
+              </Badge>
+            )}
             <Button
               size="sm"
               variant="ghost"
               onClick={() => setPipelineOpen((o) => !o)}
-              className={`text-white/70 hover:text-white hover:bg-white/10 text-xs ${pipelineIsActive ? "text-primary" : ""}`}
+              className={`text-white/70 hover:text-white hover:bg-white/10 text-xs ${pipelineState.status === "running" ? "text-primary" : ""}`}
               data-testid="pipeline-toggle-btn"
             >
-              <Zap className={`h-3.5 w-3.5 mr-1.5 ${pipelineState.status === "running" ? "animate-pulse text-primary" : ""}`} />
+              <Zap
+                className={`h-3.5 w-3.5 mr-1.5 ${pipelineState.status === "running" ? "animate-pulse text-primary" : ""}`}
+              />
               Batch Pipeline
               {pipelineOpen ? (
                 <ChevronUp className="h-3 w-3 ml-1" />
@@ -142,8 +161,14 @@ export function Dashboard() {
         <div className="flex-shrink-0 border-b border-border bg-muted/30">
           <PipelineControl
             state={pipelineState}
-            onRun={runPipeline}
-            onReset={resetPipeline}
+            onRun={() => {
+              setSelectedAlertId(null);
+              runPipeline();
+            }}
+            onReset={() => {
+              setSelectedAlertId(null);
+              resetPipeline();
+            }}
           />
           {pipelineIsActive && (
             <div className="px-6 pb-4 space-y-4">
@@ -167,6 +192,15 @@ export function Dashboard() {
               )}
             </div>
           )}
+          {pipelineState.status === "done" && pipelineWorkQueue && (
+            <div className="px-6 pb-4">
+              <p className="text-xs text-primary font-medium flex items-center gap-1.5">
+                <Zap className="h-3 w-3" />
+                Work queue updated — {pipelineWorkQueue.alerts.length} flagged transactions ready
+                for manual review below. Click any item to begin the 4-step investigation.
+              </p>
+            </div>
+          )}
         </div>
       )}
 
@@ -181,6 +215,7 @@ export function Dashboard() {
           <Sidebar
             selectedAlertId={selectedAlertId}
             onSelectAlert={setSelectedAlertId}
+            pipelineAlerts={pipelineWorkQueue?.alerts}
           />
         </aside>
 
@@ -189,14 +224,19 @@ export function Dashboard() {
             <div className="flex flex-1 items-center justify-center">
               <div className="text-center max-w-sm">
                 <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
-                  <AlertTriangle className="h-8 w-8 text-primary" />
+                  {pipelineWorkQueue ? (
+                    <Zap className="h-8 w-8 text-primary" />
+                  ) : (
+                    <AlertTriangle className="h-8 w-8 text-primary" />
+                  )}
                 </div>
                 <h3 className="text-lg font-semibold text-foreground mb-2">
-                  No Alert Selected
+                  {pipelineWorkQueue ? "Select a Flagged Transaction" : "No Alert Selected"}
                 </h3>
                 <p className="text-sm text-muted-foreground">
-                  Select an alert from the work queue to begin forensic analysis
-                  through the 4-step pipeline.
+                  {pipelineWorkQueue
+                    ? `Pipeline surfaced ${pipelineWorkQueue.alerts.length} flagged transactions. Select one from the work queue to begin your manual review.`
+                    : "Select an alert from the work queue or run the batch pipeline to begin forensic analysis."}
                 </p>
               </div>
             </div>
@@ -204,11 +244,23 @@ export function Dashboard() {
             <div className="flex flex-col flex-1 overflow-hidden">
               <div className="flex-shrink-0 px-6 pt-4 pb-0">
                 <div className="mb-3">
-                  <h2 className="text-base font-semibold text-foreground font-mono">
-                    {selectedAlertId}
-                  </h2>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h2 className="text-base font-semibold text-foreground font-mono">
+                      {selectedAlertId}
+                    </h2>
+                    {pipelineVerdict && (
+                      <Badge variant="outline" className="text-[10px] h-5 border-primary/40 text-primary">
+                        <Zap className="h-2.5 w-2.5 mr-0.5" /> Pipeline
+                      </Badge>
+                    )}
+                    {detail?.sarDraft && (
+                      <Badge variant="outline" className="text-[10px] h-5 border-amber-500/50 text-amber-600">
+                        SAR Generated
+                      </Badge>
+                    )}
+                  </div>
                   <p className="text-xs text-muted-foreground">
-                    {isLoading
+                    {isLoading && !pipelineWorkQueue
                       ? "Loading analysis…"
                       : detail
                         ? `${detail.accountName} — $${(detail.totalAmount ?? 0).toLocaleString()}`
@@ -232,9 +284,7 @@ export function Dashboard() {
                           {i + 1}
                         </span>
                         <Icon className="h-3.5 w-3.5 hidden sm:block flex-shrink-0" />
-                        <span className="text-xs font-medium truncate">
-                          {step.shortLabel}
-                        </span>
+                        <span className="text-xs font-medium truncate">{step.shortLabel}</span>
                         {step.badge && (
                           <Badge
                             className="text-[9px] px-1.5 h-4 ml-0.5 hidden md:inline-flex flex-shrink-0"
@@ -251,25 +301,32 @@ export function Dashboard() {
                 <ScrollArea className="flex-1">
                   <div className="pr-2 pb-4">
                     <TabsContent value="triage" className="mt-0">
-                      <TriageStep detail={detail} isLoading={!DEMO_MODE && isLoading} />
+                      <TriageStep
+                        detail={detail}
+                        isLoading={!DEMO_MODE && !pipelineWorkQueue && isLoading}
+                      />
                     </TabsContent>
 
                     <TabsContent value="reasoning" className="mt-0">
                       <LLMReasoningStep
                         detail={detail}
-                        isLoading={!DEMO_MODE && isLoading}
+                        isLoading={!DEMO_MODE && !pipelineWorkQueue && isLoading}
                       />
                     </TabsContent>
 
                     <TabsContent value="sar" className="mt-0">
-                      <SARDraftStep detail={detail} isLoading={!DEMO_MODE && isLoading} />
+                      <SARDraftStep
+                        detail={detail}
+                        isLoading={!DEMO_MODE && !pipelineWorkQueue && isLoading}
+                      />
                     </TabsContent>
 
                     <TabsContent value="validation" className="mt-0">
                       <ValidationStep
                         alertId={selectedAlertId}
                         detail={detail}
-                        isLoading={!DEMO_MODE && isLoading}
+                        isLoading={!DEMO_MODE && !pipelineWorkQueue && isLoading}
+                        pipelineVerdict={pipelineVerdict}
                       />
                     </TabsContent>
                   </div>

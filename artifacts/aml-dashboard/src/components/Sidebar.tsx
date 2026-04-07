@@ -8,23 +8,31 @@ import { mockAlerts } from "@/mockData";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
-import { AlertCircle, AlertTriangle, Info, Clock, ChevronRight } from "lucide-react";
+import { AlertCircle, AlertTriangle, Info, Clock, ChevronRight, Zap } from "lucide-react";
 
 interface SidebarProps {
   selectedAlertId: string | null;
   onSelectAlert: (id: string) => void;
+  pipelineAlerts?: Alert[];
 }
 
-export function Sidebar({ selectedAlertId, onSelectAlert }: SidebarProps) {
+export function Sidebar({ selectedAlertId, onSelectAlert, pipelineAlerts }: SidebarProps) {
   const { data, isLoading, isError } = useListAlerts({
     query: {
-      enabled: !DEMO_MODE,
+      enabled: !DEMO_MODE && !pipelineAlerts,
       queryKey: getListAlertsQueryKey(),
     },
   });
 
-  const alerts = DEMO_MODE || isError ? mockAlerts : data?.alerts || [];
-  const loading = !DEMO_MODE && isLoading;
+  const hasPipelineQueue = pipelineAlerts && pipelineAlerts.length > 0;
+  const alerts: Alert[] = hasPipelineQueue
+    ? pipelineAlerts
+    : DEMO_MODE || isError
+      ? mockAlerts
+      : data?.alerts ?? [];
+  const loading = !DEMO_MODE && !hasPipelineQueue && isLoading;
+
+  const pendingCount = alerts.filter((a) => a.status === "PENDING").length;
 
   const getSeverityIcon = (severity: string) => {
     switch (severity) {
@@ -47,9 +55,18 @@ export function Sidebar({ selectedAlertId, onSelectAlert }: SidebarProps) {
       <div className="p-4 border-b border-border bg-muted/30">
         <h2 className="font-semibold text-foreground flex items-center gap-2">
           <Clock className="h-4 w-4" /> Work Queue
+          {hasPipelineQueue && (
+            <Badge className="text-[10px] px-1.5 h-4 bg-primary/20 text-primary border border-primary/30 ml-auto">
+              <Zap className="h-2.5 w-2.5 mr-0.5" /> Pipeline
+            </Badge>
+          )}
         </h2>
         <p className="text-xs text-muted-foreground mt-1">
-          {loading ? "Loading alerts..." : `${alerts.length} active alerts`}
+          {loading
+            ? "Loading alerts…"
+            : hasPipelineQueue
+              ? `${alerts.length} flagged — ${pendingCount} pending review`
+              : `${alerts.length} active alerts`}
         </p>
       </div>
 
@@ -93,12 +110,19 @@ export function Sidebar({ selectedAlertId, onSelectAlert }: SidebarProps) {
                 </div>
 
                 <div className="flex items-center justify-between text-xs text-muted-foreground">
-                  <span className="truncate mr-2 max-w-[120px]">{alert.primaryFlag.replace(/_/g, ' ')}</span>
+                  <span className="truncate mr-2 max-w-[120px]">
+                    {(alert.primaryFlag ?? "").replace(/_/g, " ")}
+                  </span>
                   <span className="font-mono">${alert.totalAmount.toLocaleString()}</span>
                 </div>
 
                 <div className="mt-2 flex items-center justify-between">
-                  <Badge variant="outline" className="text-[10px] h-5 px-1.5">
+                  <Badge
+                    variant="outline"
+                    className={`text-[10px] h-5 px-1.5 ${
+                      alert.status === "PENDING" ? "border-amber-500/50 text-amber-600" : ""
+                    }`}
+                  >
                     {alert.status}
                   </Badge>
                   <ChevronRight className="h-3 w-3 text-muted-foreground" />
