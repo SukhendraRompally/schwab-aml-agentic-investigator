@@ -280,34 +280,50 @@ Point your frontend at `http://<your-server-ip>:8005`. The API is CORS-open for 
 
 ---
 
-## Key Design Decisions
+## Product Design Decisions & Tradeoffs
 
-**Rules first, LLM second.** Triage uses deterministic, auditable logic to pre-filter transactions. The LLM only engages on flagged cases — bounding cost and keeping the AI's role explainable to regulators. *"We don't let AI decide; we use AI to explain what the rules detected."*
+**Rules-first, LLM-second.**
+The most consequential architectural decision in this system. Rather than sending all transactions to the LLM, deterministic triage rules reduce the surface area to a manageable flagged set before any model is invoked. At production scale — millions of transactions daily — LLM calls on everything would be economically untenable and operationally impractical. Beyond cost and latency, there is a regulatory dimension: examiners expect explainable, auditable logic behind AML decisions. "Our AI flagged it" is unlikely to be an acceptable SAR justification. "Rule `ACCOUNT_DRAINING` triggered based on a defined behavioral condition, then the AI explained the specific pattern" is a more defensible audit trail.
 
-**Five rules, four typologies.** Each rule carries a distinct `flag_reason` injected into the LLM prompt, ensuring the model reasons about different patterns (cash placement vs. structuring vs. wire fraud) rather than returning the same answer every time.
+**Two-call LLM architecture.**
+Investigation and SAR drafting are intentionally separated into two distinct LLM calls rather than combined into a single prompt. A single prompt asking the model to simultaneously analyze a transaction and produce a FinCEN-format narrative tends to produce generic output — the model splits attention between reasoning and writing. Separating the calls means the first produces structured analytical reasoning, and the second writes the SAR narrative using that reasoning as explicit input. The quality of SAR narratives is meaningfully better, and the cost of the additional call is justified given these are externally submitted compliance documents.
 
-**One intentional FP rule.** `MODERATE_CASHOUT` is deliberately broader (~30–40% precision, 2 samples max). This produces 1–2 false positives per run, demonstrating that the system still requires human judgment and is not a black box.
+**Threshold calibration.**
+Triage thresholds ($1M for `CASH_OUT`, $500k for `TRANSFER`) were derived empirically from PaySim's fraud distribution, not set arbitrarily. Lowering thresholds increases recall but causes flagged volume to grow unsustainably — analyst workload scales with false positives, not true ones. Raising thresholds reduces noise but allows smaller-value fraud to pass through. In production, thresholds should be calibrated against institutional historical data and tuned continuously as fraud patterns evolve.
 
-**Full 2×2 confusion matrix.** TN and FN are seeded from unflagged transactions at triage time — not just from what the LLM saw. This surfaces the triage system's blind spots (FN baseline ~8) and gives an honest picture of recall across all 100 sampled rows.
+**Precision vs. Recall tension.**
+This system is optimized toward higher recall — catching more fraud — even at the cost of some false alarms. This is as much a business and compliance decision as a technical one. An institution with a large compliance team may accept lower precision to maximize fraud detection. A smaller institution with limited analyst capacity may need the inverse. The system makes this trade-off explicit and visible through the live confusion matrix, rather than hiding it behind a single accuracy number.
 
-**Blind test design.** `isFraud` and `isFlaggedFraud` are stripped before any LLM call. The validation reveal compares AI reasoning against ground truth the model never saw — making precision and recall meaningful.
-
-**Two LLM calls per suspicious transaction.** Investigation (reasoning) is separated from SAR drafting (document). This produces better narratives and avoids generating paperwork for low-risk transactions.
-
-**Async pipeline + polling.** LLM calls for ~14 transactions take 30–60 seconds. An async background task + 2-second polling keeps the UI responsive and shows real-time progress.
+**Explainability over probabilistic scoring.**
+The LLM returns narrative reasoning rather than a fraud probability score. A output like "fraud probability: 94%" cannot be submitted in a SAR. A narrative that states "this transaction drained 100% of the origin account via TRANSFER and the destination balance was immediately zeroed, consistent with pass-through layering behavior" can. In AML compliance, explainability is not a product preference — it is a regulatory requirement. The system is designed around that constraint from the ground up.
 
 ---
 
-## Limitations
+## Production Roadmap
 
-| Limitation | Notes |
-|---|---|
-| PaySim is mobile money, not bank wire transfers | Structuring/layering typologies still apply but channel context differs from real institutional transaction data |
-| Triage rules calibrated to PaySim's fraud signature | All PaySim fraud has `newbalanceOrig == 0`; rules exploit this — real-world rules would need different calibration |
-| ~8 fraud cases missed per run (FN baseline) | Transactions that don't match any rule pattern; surfaces the need for iterative rule refinement |
-| No OFAC / PEP identity resolution | Production AML requires cross-referencing watchlists and customer KYC profiles |
-| Stateless pipeline | Results reset on server restart; production needs a database with 5-year SAR retention (SOX compliance) |
-| Sequential LLM calls | ~14 transactions × ~2–3s each ≈ 30–60s runtime; production would parallelize with rate-limit management |
+### V2 — Identity Resolution Layer
+The current prototype evaluates account behavior in isolation. Production AML requires cross-referencing against external data sources: OFAC SDN watchlists, PEP (Politically Exposed Person) databases, internal KYC profiles, and beneficial ownership records. A $2M transfer carries very different risk depending on whether the account holder is a registered import/export firm or an individual retail customer. An identity resolution layer would enrich each flagged transaction before LLM analysis, enabling more contextually accurate risk decisions.
+
+### V2 — Full Account Context
+Every transaction is currently evaluated as a standalone event. Production systems should feed the LLM a full behavioral window — 30, 60, or 90 days of account history. A single $200k transfer appears suspicious in isolation; it appears routine if that account has executed $200k transfers consistently for two years. Context window depth directly affects both precision and the quality of SAR narratives.
+
+### V3 — Network Graph Analysis
+Money laundering is structurally a network problem. The same funds typically move through 5–10 accounts before reaching their destination. A graph layer connecting accounts by transaction history would enable detection of account clusters controlled by the same beneficial owner, hub accounts receiving from many sources and distributing to many destinations, and multi-hop layering chains invisible to per-transaction analysis. LLMs can reason over graph summaries in natural language in ways that rule-based systems fundamentally cannot.
+
+### V3 — RAG over Regulatory Corpus
+The current LLM relies solely on pre-training knowledge. A production system should maintain a vector store of FinCEN SAR activity reviews, FATF typology reports, internal historical SARs, and institution-specific red flag indicators. Retrieval-augmented generation would allow the model to ground its reasoning in specific regulatory precedents — producing outputs such as "this pattern matches typology X from FinCEN's 2024 report on crypto-to-cash schemes" — significantly increasing confidence and auditability of AI-generated narratives.
+
+### V3 — Multi-Turn Agentic Investigation
+Rather than a single LLM call per transaction, the system can be extended into an agentic loop where the model requests additional context mid-investigation: pulling 90-day account history, looking up the counterparty, checking whether the destination account appears in other suspicious clusters. This iterative approach enables more confident decisions and richer SAR narratives, particularly for borderline cases that a single-pass analysis cannot resolve.
+
+### V4 — Feedback Loop & Active Learning
+Analyst decisions should feed back into rule and threshold refinement over time. When an analyst overrides the AI — marking a LOW_RISK transaction as fraud, or clearing a SUSPICIOUS flag — that signal should update triage thresholds and inform future model behavior. This is the mechanism by which the system improves with institutional knowledge rather than remaining static after deployment.
+
+### V4 — Human-in-the-Loop Case Management
+A production analyst interface would include: one-click accept/reject of AI decisions with mandatory reasoning capture, case notes and evidence attachment, escalation routing from junior analyst to senior reviewer to BSA officer, case status tracking (open / in-review / escalated / filed / closed), and SLA monitoring with breach alerting. The AI layer reduces analyst workload; the case management layer ensures institutional accountability over every decision.
+
+### V4 — SAR Workflow & Regulatory Integration
+The current prototype produces a SAR draft as structured JSON. A production workflow would route the draft through a multi-stage compliance officer review, submit directly to FinCEN's BSA E-Filing System via API, maintain a tamper-evident 5-year audit trail per BSA retention requirements, and optionally trigger downstream actions such as account freeze, enhanced transaction monitoring, or referral to law enforcement liaisons.
 
 ---
 
