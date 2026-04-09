@@ -1,17 +1,22 @@
-# See https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files for more about ignoring files.
+# ── Backend (Python) ──
+.env
+venv/
+data/*.csv
+data/*.zip
+__pycache__/
+*.pyc
+server.log
+server.pid
+nohup.out
 
-# compiled output
+# ── Frontend (Node/TS) ──
 dist
 tmp
 out-tsc
 *.tsbuildinfo
 .expo
 .expo-shared
-
-# dependencies
 node_modules
-
-# IDEs and editors
 /.idea
 .project
 .classpath
@@ -19,15 +24,11 @@ node_modules
 *.launch
 .settings/
 *.sublime-workspace
-
-# IDE - VSCode
 .vscode/*
 !.vscode/settings.json
 !.vscode/tasks.json
 !.vscode/launch.json
 !.vscode/extensions.json
-
-# misc
 /.sass-cache
 /connect.lock
 /coverage
@@ -36,14 +37,9 @@ npm-debug.log
 yarn-error.log
 testem.log
 /typings
-
-# System Files
 .DS_Store
 Thumbs.db
-
 .cursor/rules/nx-rules.mdc
 .github/instructions/nx.instructions.md
-
-# Replit
 .cache/
 .local/
