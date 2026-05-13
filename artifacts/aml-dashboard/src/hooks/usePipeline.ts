@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from "react";
+import { PIPELINE_BASE_URL } from "@/config";
 import type {
   PipelineRunStatus,
   PipelineStatusResponse,
@@ -18,7 +19,7 @@ const EMPTY_CUMULATIVE: CumulativeData = {
 };
 
 function apiUrl(path: string): string {
-  const base = (import.meta.env.BASE_URL || "/").replace(/\/$/, "");
+  const base = PIPELINE_BASE_URL.replace(/\/$/, "");
   return `${base}${path}`;
 }
 
@@ -56,7 +57,7 @@ export function usePipeline() {
 
   const fetchResults = useCallback(async () => {
     try {
-      const res = await fetch(apiUrl("/api/pipeline/results"));
+      const res = await fetch(apiUrl("/pipeline/results"));
       if (!res.ok) throw new Error(`Results error: ${res.status}`);
       const data: PipelineResults = await res.json();
       setState((prev) => ({ ...prev, results: data, status: "done" }));
@@ -71,7 +72,7 @@ export function usePipeline() {
 
   const pollStatus = useCallback(async () => {
     try {
-      const res = await fetch(apiUrl("/api/pipeline/status"));
+      const res = await fetch(apiUrl("/pipeline/status"));
       if (!res.ok) throw new Error(`Status error: ${res.status}`);
       const data: PipelineStatusResponse = await res.json();
 
@@ -119,7 +120,7 @@ export function usePipeline() {
     });
 
     try {
-      const res = await fetch(apiUrl("/api/pipeline/run-async"), {
+      const res = await fetch(apiUrl("/pipeline/run-async"), {
         method: "POST",
       });
       if (!res.ok) throw new Error(`Start error: ${res.status}`);
