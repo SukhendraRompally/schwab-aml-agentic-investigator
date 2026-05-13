@@ -1,0 +1,6 @@
+{
+  "buildCommand": "pnpm --filter @workspace/aml-dashboard build",
+  "outputDirectory": "artifacts/aml-dashboard/dist/public",
+  "installCommand": "pnpm install",
+  "framework": null
+}
