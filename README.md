@@ -32,26 +32,26 @@ The scoreboard updates **after every single transaction** — not just at the en
 ## Architecture
 
 ```
-┌─────────────────────────────────┐        ┌──────────────────────────┐
-│    Frontend             │        │            Backend       │
-│  (HTML / JS / React)            │◄──────►│   FastAPI on port 8005   │
-│                                 │  HTTP  │                          │
-│  • Progress bar                 │        │  triage.py               │
-│  • Live TP/FP/FN/TN scoreboard  │        │  investigator.py         │
-│  • Transaction feed w/ verdicts │        │  validation.py           │
-│  • SAR viewer                   │        │  main.py                 │
-└─────────────────────────────────┘        └────────────┬─────────────┘
-                                                        │
-                                           ┌────────────▼─────────────┐
-                                           │   Azure OpenAI (GPT-4.1) │
-                                           │   2 calls per transaction │
-                                           │   1. Investigate (blind)  │
-                                           │   2. Draft SAR            │
-                                           └──────────────────────────┘
+┌──────────────────────────────────┐        ┌──────────────────────────┐
+│  Frontend (React + Vite)         │        │  Backend (FastAPI)        │
+│  Hosted on Vercel                │◄──────►│  Hosted on Railway        │
+│                                  │  HTTP  │                           │
+│  • Progress bar                  │        │  triage.py                │
+│  • Live TP/FP/FN/TN scoreboard   │        │  investigator.py          │
+│  • Transaction feed w/ verdicts  │        │  validation.py            │
+│  • SAR viewer                    │        │  main.py                  │
+└──────────────────────────────────┘        └────────────┬──────────────┘
+                                                         │
+                                            ┌────────────▼─────────────┐
+                                            │   Azure OpenAI (GPT-4.1) │
+                                            │   2 calls per transaction │
+                                            │   1. Investigate (blind)  │
+                                            │   2. Draft SAR            │
+                                            └──────────────────────────┘
 ```
 
 **Backend** — FastAPI on Railway, CORS-open REST API.
-**Frontend** — Vercel, polls the backend every 2 seconds for live updates.
+**Frontend** — React/Vite SPA on Vercel, polls the backend every 2 seconds for live updates.
 **LLM** — Azure OpenAI GPT-4.1. The `isFraud` label is never shown to the model (genuine blind test).
 
 ---
@@ -72,7 +72,9 @@ PaySim simulates mobile money transactions based on real anonymized data. It inc
 | `oldbalanceDest` / `newbalanceDest` | Destination balance before/after |
 | `isFraud` | Ground truth label (hidden from LLM) |
 
-The pipeline samples **100 rows** with at least 20 fraud cases guaranteed via stratified sampling across all transaction types.
+The repo includes `data/PS_sample.csv` — a stratified 5,000-row extract (500 fraud + 4,500 clean, all 5 transaction types, ~379 KB) sufficient to run the full pipeline without any additional download. The full 6M-row PaySim dataset (~471 MB) can be substituted by running `python setup_data.py` with Kaggle credentials if a larger sample pool is needed.
+
+The pipeline samples **100 rows** from whichever CSV is present, with at least 20 fraud cases guaranteed via stratified sampling across all transaction types.
 
 ---
 
@@ -160,7 +162,7 @@ In AML, **Recall is typically prioritized** — missing fraud is worse than a fa
 
 ## API Reference
 
-Base URL: `http://<VM_IP>:8005`
+Base URL: `https://web-production-2786b.up.railway.app`
 
 | Method | Endpoint | Description |
 |---|---|---|
@@ -216,38 +218,76 @@ Base URL: `http://<VM_IP>:8005`
 ## Project Structure
 
 ```
-aml_agent/
-├── main.py           # FastAPI — pipeline orchestration, all endpoints, live scoreboard
-├── triage.py         # 5 behavioral triage rules across 4 AML typologies
-├── investigator.py   # LLM investigation (GPT-4.1 blind test) + SAR drafting
-├── validation.py     # Precision/recall/F1 + FP/FN breakdown with AI reasoning
-├── setup_data.py     # One-time Kaggle dataset download
+aml-agentic-investigator/
+├── main.py                        # FastAPI — pipeline orchestration, endpoints, live scoreboard
+├── triage.py                      # 5 behavioral triage rules across 4 AML typologies
+├── investigator.py                # LLM investigation (GPT-4.1 blind test) + SAR drafting
+├── validation.py                  # Precision/recall/F1 + FP/FN breakdown with AI reasoning
+├── setup_data.py                  # Optional: download full PaySim dataset from Kaggle
 ├── requirements.txt
-├── start.sh          # uvicorn main:app --host 0.0.0.0 --port 8005
-└── data/
-    └── PS_*.csv      # PaySim dataset (downloaded via setup_data.py, gitignored)
+├── Procfile                       # Railway start command
+├── data/
+│   └── PS_sample.csv              # Bundled 5,000-row sample (no download needed)
+└── artifacts/
+    └── aml-dashboard/             # React/Vite frontend (deployed to Vercel)
+        ├── src/
+        │   ├── components/        # UI components (scoreboard, transaction feed, SAR viewer)
+        │   ├── hooks/usePipeline.ts  # Polling logic and pipeline state management
+        │   ├── pages/Dashboard.tsx
+        │   └── config.ts          # VITE_PIPELINE_BASE_URL configuration
+        ├── vite.config.ts
+        └── package.json
 ```
 
 ---
 
 ## Setup
 
-### Prerequisites
-- Python 3.11+
-- Azure OpenAI access (GPT-4.1 deployment)
-- Kaggle account (for dataset download)
+### Deployed (Production)
 
-### 1. Clone and install
+| Layer | Platform | URL |
+|-------|----------|-----|
+| Frontend | Vercel | https://aml-agentic-investigator.vercel.app/ |
+| Backend | Railway | https://web-production-2786b.up.railway.app |
+
+**Railway environment variables required:**
+
+```env
+AZURE_OPENAI_API_KEY=your_key
+AZURE_OPENAI_ENDPOINT=https://your-resource.cognitiveservices.azure.com/
+AZURE_OPENAI_DEPLOYMENT=gpt-4.1
+AZURE_OPENAI_API_VERSION=2025-01-01-preview
+```
+
+**Vercel environment variables required:**
+
+```env
+VITE_PIPELINE_BASE_URL=https://web-production-2786b.up.railway.app
+```
+
+---
+
+### Local Development
+
+#### Prerequisites
+- Python 3.11+
+- Node.js 18+ and pnpm
+- Azure OpenAI access (GPT-4.1 deployment)
+
+#### 1. Clone and install
 
 ```bash
 git clone https://github.com/SukhendraRompally/aml-agentic-investigator.git
 cd aml-agentic-investigator
+```
+
+#### 2. Start the backend
+
+```bash
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 ```
-
-### 2. Configure environment
 
 Create a `.env` file:
 
@@ -256,27 +296,27 @@ AZURE_OPENAI_API_KEY=your_key
 AZURE_OPENAI_ENDPOINT=https://your-resource.cognitiveservices.azure.com/
 AZURE_OPENAI_DEPLOYMENT=gpt-4.1
 AZURE_OPENAI_API_VERSION=2025-01-01-preview
-KAGGLE_USERNAME=your_kaggle_username
-KAGGLE_KEY=your_kaggle_api_key
 ```
 
-### 3. Download the dataset
+```bash
+uvicorn main:app --host 0.0.0.0 --port 8005 --reload
+# API live at http://localhost:8005
+```
+
+The bundled `data/PS_sample.csv` is used automatically — no Kaggle download needed. To use the full 6M-row dataset instead:
 
 ```bash
+# Requires KAGGLE_USERNAME and KAGGLE_KEY in .env
 python setup_data.py
-# Downloads PaySim CSV (~470MB) into data/
 ```
 
-### 4. Start the backend
+#### 3. Start the frontend
 
 ```bash
-./start.sh
-# API live at http://0.0.0.0:8005
+cd artifacts/aml-dashboard
+pnpm install
+VITE_PIPELINE_BASE_URL=http://localhost:8005 pnpm dev
 ```
-
-### 5. Connect the frontend
-
-Point your frontend at `http://<your-server-ip>:8005`. The API is CORS-open for all origins.
 
 ---
 
@@ -333,4 +373,5 @@ The current prototype produces a SAR draft as structured JSON. A production work
 - [Azure OpenAI (GPT-4.1)](https://azure.microsoft.com/en-us/products/ai-services/openai-service) — LLM investigation + SAR drafting
 - [PaySim](https://www.kaggle.com/datasets/ealaxi/paysim1) — Synthetic financial transaction dataset
 - [Pandas](https://pandas.pydata.org/) — Data processing and validation metrics
-- [Replit](https://replit.com) — Frontend hosting
+- [Vercel](https://vercel.com) — Frontend hosting
+- [Railway](https://railway.app) — Backend hosting
