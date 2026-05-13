@@ -33,7 +33,7 @@ The scoreboard updates **after every single transaction** — not just at the en
 
 ```
 ┌─────────────────────────────────┐        ┌──────────────────────────┐
-│     Replit Frontend             │        │   Azure VM Backend       │
+│    Frontend             │        │            Backend       │
 │  (HTML / JS / React)            │◄──────►│   FastAPI on port 8005   │
 │                                 │  HTTP  │                          │
 │  • Progress bar                 │        │  triage.py               │
@@ -50,8 +50,8 @@ The scoreboard updates **after every single transaction** — not just at the en
                                            └──────────────────────────┘
 ```
 
-**Backend** — FastAPI on an Azure VM, CORS-open REST API.
-**Frontend** — Replit, polls the backend every 2 seconds for live updates.
+**Backend** — FastAPI on Railway, CORS-open REST API.
+**Frontend** — Vercel, polls the backend every 2 seconds for live updates.
 **LLM** — Azure OpenAI GPT-4.1. The `isFraud` label is never shown to the model (genuine blind test).
 
 ---
