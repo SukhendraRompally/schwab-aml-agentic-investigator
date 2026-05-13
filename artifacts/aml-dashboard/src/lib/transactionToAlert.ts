@@ -101,8 +101,8 @@ export function buildPipelineWorkQueue(
         totalAmount: tx.amount,
         dateRangeStart: matchedSar.generated_at,
         dateRangeEnd: matchedSar.generated_at,
-        filingInstitution: "Charles Schwab & Co., Inc.",
-        filingOfficer: "AML Compliance Team — AI.x Pipeline",
+        filingInstitution: "Reporting Financial Institution",
+        filingOfficer: "AML Compliance Team",
       };
     }
 

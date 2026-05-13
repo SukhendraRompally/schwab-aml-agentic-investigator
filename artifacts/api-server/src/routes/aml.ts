@@ -178,12 +178,12 @@ const MOCK_ALERT_DETAILS: Record<string, object> = {
       subjectAccountNumber: "ACC-7291-KX",
       suspiciousActivityType: "Money Laundering - Layering/Integration",
       narrative:
-        "Charles Schwab & Co., Inc. is filing this Suspicious Activity Report regarding account holder Meridian Trading LLC (Account No. ACC-7291-KX). During the period of March 13-15, 2024, the subject conducted a series of transactions totaling $487,250.00 that exhibit characteristics consistent with money laundering activity.\n\nOn March 13, 2024, six cash deposits ranging from $7,500 to $9,900 were made totaling $48,725.00. These deposits appear structured to avoid Currency Transaction Report filing thresholds. On March 14, 2024 at 22:14 EST, a wire transfer of $438,525.00 was initiated to Paphos Commerce Bank in Limassol, Cyprus (BIC: PCBCYP2X), representing a 90% clearance of the account balance. Subsequent wire transfers of $200,000.00 and $150,000.00 were executed within 6 hours to Offshore Premier Ltd (Tortola, BVI) and Seychelles Investment Services Ltd respectively.\n\nThe subject's 18-month transaction history reflects average monthly volume of approximately $42,000, making the current activity a 1,160% deviation from historical baseline. The subject entity shows no documented import/export activity or business relationships that would justify international transfers of this magnitude to these jurisdictions.\n\nBased on AI-assisted forensic analysis with 94% confidence, this activity is assessed as SUSPICIOUS and is recommended for immediate SAR filing and possible referral to FinCEN.",
+        "The reporting financial institution is filing this Suspicious Activity Report regarding account holder Meridian Trading LLC (Account No. ACC-7291-KX). During the period of March 13-15, 2024, the subject conducted a series of transactions totaling $487,250.00 that exhibit characteristics consistent with money laundering activity.\n\nOn March 13, 2024, six cash deposits ranging from $7,500 to $9,900 were made totaling $48,725.00. These deposits appear structured to avoid Currency Transaction Report filing thresholds. On March 14, 2024 at 22:14 EST, a wire transfer of $438,525.00 was initiated to Paphos Commerce Bank in Limassol, Cyprus (BIC: PCBCYP2X), representing a 90% clearance of the account balance. Subsequent wire transfers of $200,000.00 and $150,000.00 were executed within 6 hours to Offshore Premier Ltd (Tortola, BVI) and Seychelles Investment Services Ltd respectively.\n\nThe subject's 18-month transaction history reflects average monthly volume of approximately $42,000, making the current activity a 1,160% deviation from historical baseline. The subject entity shows no documented import/export activity or business relationships that would justify international transfers of this magnitude to these jurisdictions.\n\nBased on AI-assisted forensic analysis with 94% confidence, this activity is assessed as SUSPICIOUS and is recommended for immediate SAR filing and possible referral to FinCEN.",
       totalAmount: 487250.0,
       dateRangeStart: new Date("2024-03-13"),
       dateRangeEnd: new Date("2024-03-15"),
-      filingInstitution: "Charles Schwab & Co., Inc.",
-      filingOfficer: "AML Compliance Team — AI.x Division",
+      filingInstitution: "Reporting Financial Institution",
+      filingOfficer: "AML Compliance Team",
     },
   },
   "ALT-2024-0002": {
@@ -241,12 +241,12 @@ const MOCK_ALERT_DETAILS: Record<string, object> = {
       subjectAccountNumber: "ACC-3847-MN",
       suspiciousActivityType: "Structuring / Smurfing",
       narrative:
-        "Charles Schwab & Co., Inc. reports suspicious structuring activity for Phoenix Holding Group (Account No. ACC-3847-MN). Between March 12-14, 2024, eleven cash deposits were conducted at six branch locations across California, Nevada, and Arizona, with all amounts between $8,000-$9,900 totaling $89,430.00. The transaction size uniformity and geographic spread suggest coordinated smurfing activity designed to evade CTR requirements.",
+        "The reporting financial institution reports suspicious structuring activity for Phoenix Holding Group (Account No. ACC-3847-MN). Between March 12-14, 2024, eleven cash deposits were conducted at six branch locations across California, Nevada, and Arizona, with all amounts between $8,000-$9,900 totaling $89,430.00. The transaction size uniformity and geographic spread suggest coordinated smurfing activity designed to evade CTR requirements.",
       totalAmount: 89430.0,
       dateRangeStart: new Date("2024-03-12"),
       dateRangeEnd: new Date("2024-03-14"),
-      filingInstitution: "Charles Schwab & Co., Inc.",
-      filingOfficer: "AML Compliance Team — AI.x Division",
+      filingInstitution: "Reporting Financial Institution",
+      filingOfficer: "AML Compliance Team",
     },
   },
 };
@@ -280,12 +280,12 @@ for (const alert of MOCK_ALERTS) {
         subjectName: alert.accountName,
         subjectAccountNumber: alert.accountId,
         suspiciousActivityType: "Suspicious Transaction Activity",
-        narrative: `Charles Schwab & Co., Inc. reports suspicious activity for ${alert.accountName} (Account No. ${alert.accountId}). Primary concern: ${alert.primaryFlag}. Total amount at risk: $${alert.totalAmount.toLocaleString()}. AI confidence: ${Math.round(alert.riskScore)}%.`,
+        narrative: `The reporting financial institution reports suspicious activity for ${alert.accountName} (Account No. ${alert.accountId}). Primary concern: ${alert.primaryFlag}. Total amount at risk: $${alert.totalAmount.toLocaleString()}. AI confidence: ${Math.round(alert.riskScore)}%.`,
         totalAmount: alert.totalAmount,
         dateRangeStart: new Date(alert.createdAt.getTime() - 7 * 24 * 60 * 60 * 1000),
         dateRangeEnd: alert.createdAt,
-        filingInstitution: "Charles Schwab & Co., Inc.",
-        filingOfficer: "AML Compliance Team — AI.x Division",
+        filingInstitution: "Reporting Financial Institution",
+        filingOfficer: "AML Compliance Team",
       },
     };
   }

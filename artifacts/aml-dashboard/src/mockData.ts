@@ -166,12 +166,12 @@ export const mockAlertDetails: Record<string, AlertDetail> = {
       subjectAccountNumber: "ACCT-8821",
       suspiciousActivityType: "Account Clearing / Capital Flight / Money Laundering",
       narrative:
-        "Charles Schwab & Co., Inc. is filing this Suspicious Activity Report regarding account holder Global Trade Corp (Account No. ACCT-8821). During the reporting period, the subject conducted a series of transactions totaling $1,250,000 that exhibit characteristics consistent with a structured money laundering scheme.\n\nBetween [Date Range], six cash deposits ranging from $7,800 to $9,900 were made, totaling $48,000 — structured to avoid Currency Transaction Report filing requirements. Subsequently, four wire transfers totaling $1,125,000 (representing 90% of the account's historical average balance) were executed within 48 hours. Of these, $125,000 was wired to offshore correspondent banks in Cyprus and the British Virgin Islands, jurisdictions with elevated FATF risk ratings.\n\nBased on AI-assisted forensic analysis (Confidence: 92%), this activity is assessed as SUSPICIOUS. The transaction sequence — structured placement, rapid layering, and international integration — is consistent with established money laundering typologies. Immediate SAR filing and FinCEN referral recommended.",
+        "The reporting financial institution is filing this Suspicious Activity Report regarding account holder Global Trade Corp (Account No. ACCT-8821). During the reporting period, the subject conducted a series of transactions totaling $1,250,000 that exhibit characteristics consistent with a structured money laundering scheme.\n\nBetween [Date Range], six cash deposits ranging from $7,800 to $9,900 were made, totaling $48,000 — structured to avoid Currency Transaction Report filing requirements. Subsequently, four wire transfers totaling $1,125,000 (representing 90% of the account's historical average balance) were executed within 48 hours. Of these, $125,000 was wired to offshore correspondent banks in Cyprus and the British Virgin Islands, jurisdictions with elevated FATF risk ratings.\n\nBased on AI-assisted forensic analysis (Confidence: 92%), this activity is assessed as SUSPICIOUS. The transaction sequence — structured placement, rapid layering, and international integration — is consistent with established money laundering typologies. Immediate SAR filing and FinCEN referral recommended.",
       totalAmount: 1250000,
       dateRangeStart: iso(1000 * 60 * 60 * 48),
       dateRangeEnd: new Date().toISOString(),
-      filingInstitution: "Charles Schwab & Co., Inc.",
-      filingOfficer: "AML Compliance Team — AI.x Division",
+      filingInstitution: "Reporting Financial Institution",
+      filingOfficer: "AML Compliance Team",
     },
   },
 };
@@ -216,12 +216,12 @@ mockAlerts.forEach((alert) => {
         subjectName: alert.accountName,
         subjectAccountNumber: alert.accountId,
         suspiciousActivityType: alert.primaryFlag.replace(/_/g, " / "),
-        narrative: `Charles Schwab & Co., Inc. is filing this Suspicious Activity Report regarding account holder ${alert.accountName} (Account No. ${alert.accountId}). During the reporting period, the subject conducted transactions totaling $${alert.totalAmount.toLocaleString()} that exhibit characteristics consistent with ${alert.primaryFlag.replace(/_/g, " ").toLowerCase()} typology.\n\nBased on AI-assisted forensic analysis (Confidence: ${alert.riskScore}%), this activity is assessed as ${aiDecision.replace(/_/g, " ")}. ${alert.flagCount} behavioral flag${alert.flagCount !== 1 ? "s" : ""} were triggered during automated screening. Manual review and, if warranted, escalation to FinCEN is recommended.`,
+        narrative: `The reporting financial institution is filing this Suspicious Activity Report regarding account holder ${alert.accountName} (Account No. ${alert.accountId}). During the reporting period, the subject conducted transactions totaling $${alert.totalAmount.toLocaleString()} that exhibit characteristics consistent with ${alert.primaryFlag.replace(/_/g, " ").toLowerCase()} typology.\n\nBased on AI-assisted forensic analysis (Confidence: ${alert.riskScore}%), this activity is assessed as ${aiDecision.replace(/_/g, " ")}. ${alert.flagCount} behavioral flag${alert.flagCount !== 1 ? "s" : ""} were triggered during automated screening. Manual review and, if warranted, escalation to FinCEN is recommended.`,
         totalAmount: alert.totalAmount,
         dateRangeStart: iso(1000 * 60 * 60 * 48),
         dateRangeEnd: new Date().toISOString(),
-        filingInstitution: "Charles Schwab & Co., Inc.",
-        filingOfficer: "AML Compliance Team — AI.x Division",
+        filingInstitution: "Reporting Financial Institution",
+        filingOfficer: "AML Compliance Team",
       },
     };
   }
